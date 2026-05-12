@@ -11,13 +11,14 @@ const isLoading = ref(false);
 const hasRevealedAnswer = ref(false);
 const errorMessage = ref("");
 const requestCooldownSeconds = ref(0);
-const clipSeconds = ref(5);
+const clipSeconds = ref(1);
 const previewPlayerRef = ref<InstanceType<typeof PreviewPlayer> | null>(null);
 let requestCooldownTimer: number | null = null;
 let shouldAutoplayAfterDraw = false;
 
 const minClipSeconds = 1;
 const maxClipSeconds = 30;
+const siteLogoUrl = `${import.meta.env.BASE_URL}logo.jpeg`;
 
 const canRequestSong = computed(() => {
   return !isLoading.value && requestCooldownSeconds.value === 0;
@@ -164,7 +165,10 @@ onBeforeUnmount(() => {
   <main class="page-shell">
     <section class="hero-panel">
       <p class="eyebrow">The Best People in Life are Free</p>
-      <h1>Taylor Swift 猜歌挑战</h1>
+      <div class="hero-brand">
+        <img class="hero-logo" :src="siteLogoUrl" alt="TS 猜歌挑战 logo" />
+        <h1>TS猜歌挑战</h1>
+      </div>
       <p class="hero-copy">
         点击“重新抽取曲目”后，系统将从试听音频中随机截取一段指定长度的音频片段。
         请先收听音频，再根据内容判断对应的 Taylor Swift 曲目；如需核对结果，
