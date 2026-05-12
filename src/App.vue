@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import PreviewPlayer from "./components/PreviewPlayer.vue";
 import { ItunesRequestError, searchSongPreview } from "./services/itunes";
 import type { ItunesTrack, SongSeed } from "./types";
@@ -12,7 +12,9 @@ const hasRevealedAnswer = ref(false);
 const errorMessage = ref("");
 const requestCooldownSeconds = ref(0);
 const clipSeconds = ref(5);
+const previewPlayerRef = ref<InstanceType<typeof PreviewPlayer> | null>(null);
 let requestCooldownTimer: number | null = null;
+let shouldAutoplayAfterDraw = false;
 
 const minClipSeconds = 1;
 const maxClipSeconds = 30;
@@ -110,7 +112,14 @@ async function drawRandomSong() {
     const track = await searchSongPreview(candidate);
     selectedSong.value = candidate;
     selectedTrack.value = track;
+
+    if (shouldAutoplayAfterDraw) {
+      await nextTick();
+      await previewPlayerRef.value?.playFromCurrentMode();
+      shouldAutoplayAfterDraw = false;
+    }
   } catch (error) {
+    shouldAutoplayAfterDraw = false;
     errorMessage.value =
       error instanceof ItunesRequestError
         ? error.message
@@ -128,6 +137,7 @@ async function requestRandomSong() {
   }
 
   startRequestCooldown();
+  shouldAutoplayAfterDraw = true;
   await drawRandomSong();
 }
 
@@ -251,6 +261,7 @@ onBeforeUnmount(() => {
       <article class="audio-card">
         <p class="card-label">试听音频</p>
         <PreviewPlayer
+          ref="previewPlayerRef"
           v-if="selectedTrack?.previewUrl"
           :clip-seconds="clipSeconds"
           :revealed="hasRevealedAnswer"

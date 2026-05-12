@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const audioRef = ref<HTMLAudioElement | null>(null);
 const isPlaying = ref(false);
+let clipStartTime: number | null = null;
 let segmentEndTime = 0;
 let segmentTimer: number | null = null;
 
@@ -28,6 +29,10 @@ function resetPlaybackState() {
   clearSegmentTimer();
   segmentEndTime = 0;
   isPlaying.value = false;
+}
+
+function resetClipSelection() {
+  clipStartTime = null;
 }
 
 function ensureMetadataLoaded(audio: HTMLAudioElement): Promise<void> {
@@ -67,7 +72,7 @@ function scheduleSegmentStop(audio: HTMLAudioElement) {
   }, remainingMs);
 }
 
-async function startRandomClip() {
+async function startSelectedClip() {
   if (!audioRef.value) {
     return;
   }
@@ -77,11 +82,13 @@ async function startRandomClip() {
 
   const maxClipLength = Math.max(Math.floor(audio.duration), 1);
   const clipLength = Math.min(props.clipSeconds, maxClipLength);
-  const maxStartTime = Math.max(audio.duration - clipLength, 0);
-  const startTime = maxStartTime > 0 ? Math.random() * maxStartTime : 0;
+  if (clipStartTime === null) {
+    const maxStartTime = Math.max(audio.duration - clipLength, 0);
+    clipStartTime = maxStartTime > 0 ? Math.random() * maxStartTime : 0;
+  }
 
-  audio.currentTime = startTime;
-  segmentEndTime = startTime + clipLength;
+  audio.currentTime = clipStartTime;
+  segmentEndTime = clipStartTime + clipLength;
   await audio.play();
   scheduleSegmentStop(audio);
 }
@@ -117,13 +124,15 @@ async function togglePlayback() {
     return;
   }
 
-  if (segmentEndTime > audio.currentTime && audio.currentTime > 0) {
-    await audio.play();
-    scheduleSegmentStop(audio);
+  await startSelectedClip();
+}
+
+async function playFromCurrentMode() {
+  if (isPlaying.value) {
     return;
   }
 
-  await startRandomClip();
+  await togglePlayback();
 }
 
 watch(
@@ -135,6 +144,7 @@ watch(
 
     audioRef.value.pause();
     audioRef.value.load();
+    resetClipSelection();
     resetPlaybackState();
   }
 );
@@ -155,6 +165,10 @@ watch(
 onBeforeUnmount(() => {
   clearSegmentTimer();
   audioRef.value?.pause();
+});
+
+defineExpose({
+  playFromCurrentMode
 });
 </script>
 
