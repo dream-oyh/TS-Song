@@ -164,7 +164,28 @@ onBeforeUnmount(() => {
 <template>
   <main class="page-shell">
     <section class="hero-panel">
-      <p class="eyebrow">The Best People in Life are Free</p>
+      <div class="hero-topbar">
+        <p class="eyebrow">The Best People in Life are Free</p>
+        <a
+          class="repo-link"
+          href="https://github.com/dream-oyh/TS-Song"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open GitHub repository"
+        >
+          <svg
+            class="repo-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              fill="currentColor"
+              d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.41-4.04-1.41-.55-1.37-1.34-1.73-1.34-1.73-1.09-.73.08-.72.08-.72 1.2.08 1.84 1.22 1.84 1.22 1.07 1.81 2.8 1.29 3.49.98.11-.76.42-1.29.76-1.59-2.67-.3-5.48-1.32-5.48-5.86 0-1.29.47-2.35 1.23-3.18-.12-.3-.53-1.52.12-3.17 0 0 1.01-.32 3.3 1.21a11.5 11.5 0 0 1 6 0c2.29-1.53 3.29-1.21 3.29-1.21.66 1.65.25 2.87.13 3.17.77.83 1.23 1.89 1.23 3.18 0 4.55-2.81 5.56-5.49 5.86.43.37.81 1.09.81 2.2v3.26c0 .32.22.69.82.58A12 12 0 0 0 12 .5Z"
+            />
+          </svg>
+        </a>
+      </div>
       <div class="hero-brand">
         <img class="hero-logo" :src="siteLogoUrl" alt="TS 猜歌挑战 logo" />
         <h1>TS猜歌挑战</h1>

@@ -66,6 +66,14 @@ npm install
 
 ### 2. Start local development server
 
+推荐直接使用一键启动命令：
+
+```bash
+npm run dev:all
+```
+
+如果需要手动分别启动，也可以使用两个终端：
+
 先启动本地代理服务：
 
 ```bash
