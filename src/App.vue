@@ -1,0 +1,275 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import PreviewPlayer from "./components/PreviewPlayer.vue";
+import { ItunesRequestError, searchSongPreview } from "./services/itunes";
+import type { ItunesTrack, SongSeed } from "./types";
+
+const songPool = ref<SongSeed[]>([]);
+const selectedSong = ref<SongSeed | null>(null);
+const selectedTrack = ref<ItunesTrack | null>(null);
+const isLoading = ref(false);
+const hasRevealedAnswer = ref(false);
+const errorMessage = ref("");
+const requestCooldownSeconds = ref(0);
+const clipSeconds = ref(5);
+let requestCooldownTimer: number | null = null;
+
+const minClipSeconds = 1;
+const maxClipSeconds = 30;
+
+const canRequestSong = computed(() => {
+  return !isLoading.value && requestCooldownSeconds.value === 0;
+});
+const requestButtonLabel = computed(() => {
+  if (isLoading.value) {
+    return "正在加载曲目";
+  }
+
+  if (requestCooldownSeconds.value > 0) {
+    return `${requestCooldownSeconds.value} 秒后可重新抽取`;
+  }
+
+  return "重新抽取曲目";
+});
+
+function increaseClipSeconds() {
+  clipSeconds.value = Math.min(clipSeconds.value + 1, maxClipSeconds);
+}
+
+function decreaseClipSeconds() {
+  clipSeconds.value = Math.max(clipSeconds.value - 1, minClipSeconds);
+}
+
+function getSongJsonUrl(): string {
+  return `${import.meta.env.BASE_URL}song.json`;
+}
+
+async function loadSongPool() {
+  const response = await fetch(getSongJsonUrl());
+  if (!response.ok) {
+    throw new Error("曲目库加载失败。");
+  }
+
+  songPool.value = (await response.json()) as SongSeed[];
+}
+
+function pickRandomSong(): SongSeed | null {
+  if (songPool.value.length === 0) {
+    return null;
+  }
+
+  const randomIndex = Math.floor(Math.random() * songPool.value.length);
+  return songPool.value[randomIndex] ?? null;
+}
+
+function clearRequestCooldownTimer() {
+  if (requestCooldownTimer === null) {
+    return;
+  }
+
+  window.clearInterval(requestCooldownTimer);
+  requestCooldownTimer = null;
+}
+
+function startRequestCooldown() {
+  clearRequestCooldownTimer();
+  requestCooldownSeconds.value = 5;
+
+  requestCooldownTimer = window.setInterval(() => {
+    if (requestCooldownSeconds.value <= 1) {
+      requestCooldownSeconds.value = 0;
+      clearRequestCooldownTimer();
+      return;
+    }
+
+    requestCooldownSeconds.value -= 1;
+  }, 1000);
+}
+
+async function drawRandomSong() {
+  if (songPool.value.length === 0) {
+    errorMessage.value = "当前曲库为空，请检查 song.json 数据。";
+    return;
+  }
+
+  isLoading.value = true;
+  hasRevealedAnswer.value = false;
+  errorMessage.value = "";
+  selectedTrack.value = null;
+  selectedSong.value = null;
+
+  const candidate = pickRandomSong();
+
+  if (!candidate) {
+    errorMessage.value = "当前曲库为空，请检查 song.json 数据。";
+    isLoading.value = false;
+    return;
+  }
+
+  try {
+    const track = await searchSongPreview(candidate);
+    selectedSong.value = candidate;
+    selectedTrack.value = track;
+  } catch (error) {
+    errorMessage.value =
+      error instanceof ItunesRequestError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "歌曲查询失败，请稍后重试。";
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+async function requestRandomSong() {
+  if (!canRequestSong.value) {
+    return;
+  }
+
+  startRequestCooldown();
+  await drawRandomSong();
+}
+
+function revealAnswer() {
+  hasRevealedAnswer.value = true;
+}
+
+onMounted(async () => {
+  try {
+    await loadSongPool();
+    await drawRandomSong();
+  } catch (error) {
+    errorMessage.value =
+      error instanceof Error ? error.message : "初始化失败，请刷新页面重试。";
+  }
+});
+
+onBeforeUnmount(() => {
+  clearRequestCooldownTimer();
+});
+</script>
+
+<template>
+  <main class="page-shell">
+    <section class="hero-panel">
+      <p class="eyebrow">The Best People in Life are Free</p>
+      <h1>Taylor Swift 猜歌挑战</h1>
+      <p class="hero-copy">
+        点击“重新抽取曲目”后，系统将从试听音频中随机截取一段指定长度的音频片段。
+        请先收听音频，再根据内容判断对应的 Taylor Swift 曲目；如需核对结果，
+        可点击“查看曲目信息”。
+      </p>
+
+      <div class="hero-actions">
+        <button
+          class="primary-button"
+          type="button"
+          @click="requestRandomSong"
+          :disabled="!canRequestSong"
+        >
+          {{ requestButtonLabel }}
+        </button>
+        <button
+          class="ghost-button"
+          type="button"
+          @click="revealAnswer"
+          :disabled="!selectedSong"
+        >
+          查看曲目信息
+        </button>
+      </div>
+    </section>
+
+    <section class="settings-panel">
+      <p class="card-label">筛选与配置</p>
+      <div class="setting-row">
+        <div class="setting-copy">
+          <h2>猜歌秒数</h2>
+          <p>设置每次播放时，从试听音频中随机截取的片段长度。</p>
+        </div>
+
+        <div class="stepper" aria-label="猜歌秒数设置">
+          <button
+            class="ghost-button stepper-button"
+            type="button"
+            @click="decreaseClipSeconds"
+            :disabled="clipSeconds <= minClipSeconds"
+          >
+            -1
+          </button>
+          <div class="stepper-value">
+            <strong>{{ clipSeconds }}</strong>
+            <span>秒</span>
+          </div>
+          <button
+            class="ghost-button stepper-button"
+            type="button"
+            @click="increaseClipSeconds"
+            :disabled="clipSeconds >= maxClipSeconds"
+          >
+            +1
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-grid">
+      <article class="clue-card">
+        <p class="card-label">曲目状态</p>
+        <div
+          v-if="selectedTrack && selectedSong"
+          :class="['clue-body', { 'clue-body--revealed': hasRevealedAnswer }]"
+        >
+          <img
+            v-if="hasRevealedAnswer && selectedTrack.artworkUrl100"
+            class="cover-art"
+            :src="selectedTrack.artworkUrl100"
+            :alt="selectedTrack.trackName"
+          />
+
+          <div class="answer-block">
+            <template v-if="hasRevealedAnswer">
+              <h2>{{ selectedTrack.trackName }}</h2>
+              <p>{{ selectedTrack.artistName }}</p>
+            </template>
+
+            <template v-else>
+              <h2>当前曲目信息尚未公开</h2>
+              <p>
+                请先收听本轮提供的试听片段，并根据音频内容自行判断对应曲目的名称与演唱者。
+                如需查看本轮答案，请点击上方“查看曲目信息”按钮。
+              </p>
+            </template>
+          </div>
+        </div>
+
+        <p v-else-if="isLoading" class="muted-copy">正在获取可播放的试听内容，请稍候。</p>
+        <p v-else class="muted-copy">请点击“重新抽取曲目”以开始本轮挑战。</p>
+      </article>
+
+      <article class="audio-card">
+        <p class="card-label">试听音频</p>
+        <PreviewPlayer
+          v-if="selectedTrack?.previewUrl"
+          :clip-seconds="clipSeconds"
+          :revealed="hasRevealedAnswer"
+          :src="selectedTrack.previewUrl"
+          :title="selectedTrack.trackName"
+        />
+        <p v-else class="muted-copy">当前暂无可用试听音频。</p>
+      </article>
+    </section>
+
+    <p v-if="errorMessage" class="error-banner">
+      {{ errorMessage }}
+    </p>
+
+    <footer class="page-footer">
+      <span class="footer-line" aria-hidden="true"></span>
+      <p class="footer-kicker">Taylor Swift Song Challenge</p>
+      <p class="footer-credit">BUILD BY DREAM</p>
+      <p class="footer-support">SUPPORTED BY iTunes API SERVICE</p>
+    </footer>
+  </main>
+</template>
