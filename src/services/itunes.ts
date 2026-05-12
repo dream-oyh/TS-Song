@@ -1,9 +1,5 @@
+import axios from "axios";
 import type { ItunesTrack, SongSeed } from "../types";
-
-interface ItunesSearchResponse {
-  resultCount: number;
-  results: ItunesTrack[];
-}
 
 export class ItunesRequestError extends Error {
   constructor(message: string) {
@@ -12,87 +8,51 @@ export class ItunesRequestError extends Error {
   }
 }
 
-let jsonpSequence = 0;
+function getApiBaseUrl(): string {
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (configuredBaseUrl) {
+    return configuredBaseUrl.replace(/\/$/, "");
+  }
 
-function normalizeText(text: string): string {
-  return text
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, "");
-}
+  if (import.meta.env.DEV) {
+    return "";
+  }
 
-function pickBestTrack(results: ItunesTrack[], song: SongSeed): ItunesTrack | null {
-  const targetSong = normalizeText(song.name);
-  const targetArtist = normalizeText(song.artist);
-
-  const exactMatch = results.find((item) => {
-    return (
-      normalizeText(item.trackName) === targetSong &&
-      normalizeText(item.artistName) === targetArtist
-    );
-  });
-
-  const songOnlyMatch = results.find((item) => {
-    return normalizeText(item.trackName) === targetSong;
-  });
-
-  return exactMatch ?? songOnlyMatch ?? results[0] ?? null;
-}
-
-function jsonpRequest(url: URL): Promise<ItunesSearchResponse> {
-  return new Promise((resolve, reject) => {
-    const callbackName = `__itunesJsonpCallback_${Date.now()}_${jsonpSequence++}`;
-    const script = document.createElement("script");
-    const callbackHost = window as unknown as Record<
-      string,
-      ((payload: ItunesSearchResponse) => void) | undefined
-    >;
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      reject(new ItunesRequestError("iTunes 请求超时，请点击按钮后重试。"));
-    }, 12000);
-
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      delete callbackHost[callbackName];
-      script.remove();
-    };
-
-    callbackHost[callbackName] = (payload: ItunesSearchResponse) => {
-      cleanup();
-      resolve(payload);
-    };
-
-    script.onerror = () => {
-      cleanup();
-      reject(new ItunesRequestError("iTunes 请求失败，请点击按钮后重试。"));
-    };
-
-    url.searchParams.set("callback", callbackName);
-    script.src = url.toString();
-    document.body.appendChild(script);
-  });
+  throw new ItunesRequestError("代理服务地址未配置。请设置 VITE_API_BASE_URL 后重新构建站点。");
 }
 
 export async function searchSongPreview(song: SongSeed): Promise<ItunesTrack> {
-  const url = new URL("https://itunes.apple.com/search");
-  url.searchParams.set("term", `${song.artist} ${song.name}`);
-  url.searchParams.set("media", "music");
-  url.searchParams.set("entity", "song");
-  url.searchParams.set("limit", "10");
-  url.searchParams.set("country", song.country);
+  try {
+    const response = await axios.get<ItunesTrack>(`${getApiBaseUrl()}/api/itunes/search`, {
+      params: {
+        name: song.name,
+        artist: song.artist,
+        country: song.country
+      },
+      timeout: 15000
+    });
 
-  const payload = await jsonpRequest(url);
+    if (!response.data?.previewUrl) {
+      throw new Error("代理服务返回了歌曲结果，但没有可播放的试听音频。");
+    }
 
-  if (!payload.resultCount || payload.results.length === 0) {
-    throw new Error(`没有找到 ${song.artist} - ${song.name} 的搜索结果。`);
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const message =
+        typeof error.response?.data === "object" &&
+        error.response?.data !== null &&
+        "message" in error.response.data &&
+        typeof error.response.data.message === "string"
+          ? error.response.data.message
+          : error.message || "iTunes 请求失败，请点击按钮后重试。";
+      throw new ItunesRequestError(message);
+    }
+
+    if (error instanceof Error) {
+      throw new ItunesRequestError(error.message);
+    }
+
+    throw new ItunesRequestError("iTunes 请求失败，请点击按钮后重试。");
   }
-
-  const track = pickBestTrack(payload.results, song);
-
-  if (!track?.previewUrl) {
-    throw new Error(`找到了歌曲，但没有可播放的试听音频。`);
-  }
-
-  return track;
 }
