@@ -29,22 +29,27 @@ function normalizeText(text: string): string {
     .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
+function isArtistMatch(resultArtistName: string, targetArtistName: string): boolean {
+  const normalizedResultArtist = normalizeText(resultArtistName);
+  const normalizedTargetArtist = normalizeText(targetArtistName);
+
+  return (
+    normalizedResultArtist === normalizedTargetArtist ||
+    normalizedResultArtist.includes(normalizedTargetArtist)
+  );
+}
+
 function pickBestTrack(results: ItunesTrack[], songName: string, artistName: string): ItunesTrack | null {
   const targetSong = normalizeText(songName);
-  const targetArtist = normalizeText(artistName);
-
-  const exactMatch = results.find((item) => {
-    return (
-      normalizeText(item.trackName) === targetSong &&
-      normalizeText(item.artistName) === targetArtist
-    );
+  const artistMatchedResults = results.filter((item) => {
+    return isArtistMatch(item.artistName, artistName);
   });
 
-  const songOnlyMatch = results.find((item) => {
+  const exactMatch = artistMatchedResults.find((item) => {
     return normalizeText(item.trackName) === targetSong;
   });
 
-  return exactMatch ?? songOnlyMatch ?? results[0] ?? null;
+  return exactMatch ?? artistMatchedResults[0] ?? null;
 }
 
 app.get("/api/health", (_request: Request, response: Response) => {
@@ -93,9 +98,16 @@ app.get("/api/itunes/search", async (request: Request, response: Response) => {
 
     const track = pickBestTrack(payload.results, songName, artistName);
 
-    if (!track?.previewUrl) {
+    if (!track) {
       response.status(404).json({
-        message: "A track was found, but no preview audio is available."
+        message: `No results matched artist ${artistName} for song ${songName}.`
+      });
+      return;
+    }
+
+    if (!track.previewUrl) {
+      response.status(404).json({
+        message: `A matching track for ${artistName} - ${songName} was found, but no preview audio is available.`
       });
       return;
     }
